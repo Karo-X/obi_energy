@@ -21,6 +21,7 @@ from .const import (
     BRIDGES_URL,
     HISTORICAL_DATA_URL_TEMPLATE,
     LOGIN_COOKIE,
+    LOGIN_COUNTRY,
     LOGIN_HOST,
     LOGIN_ORIGIN,
     LOGIN_REFERER,
@@ -131,7 +132,11 @@ class ObiApiClient:
         # content-type/content-length handling and can conflict with the
         # exact headers OBI (and the CloudFront in front of it) expect.
         payload = json.dumps(
-            {"email": self._email, "password": self._password},
+            {
+                "password": self._password,
+                "country": LOGIN_COUNTRY,
+                "email": self._email,
+            },
             separators=(",", ":"),
         )
         payload_bytes = payload.encode("utf-8")

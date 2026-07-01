@@ -29,6 +29,7 @@ LOGIN_COOKIE = "obi_storeid=527"
 LOGIN_HOST = "www.obi.de"
 LOGIN_ORIGIN = "https://www.obi.de"
 LOGIN_REFERER = "https://www.obi.de/"
+LOGIN_COUNTRY = "de"
 ACCEPT_BRIDGES = "application/vnd.obi.companion.energy-tracking.bridge.v1+json"
 ACCEPT_HISTORICAL = "application/vnd.obi.companion.energy-tracking.historical-record.v1+json"
 
