@@ -151,6 +151,18 @@ Dashboard — not the Wh sensors or the net sensor.
 - Use the **manual `HH_ID` / `MID_ID` override** in the integration options
   to keep the integration running with known IDs.
 
+### "Verbindung zu den OBI-Servern konnte nicht hergestellt werden" / `cannot_connect`
+
+This generic message is shown in the UI for any network-level failure. The
+Home Assistant log always has the real cause at `ERROR` level, logged from
+`custom_components.obi_energy.api` and `custom_components.obi_energy.config_flow`
+— check **Settings → System → Logs** (or `home-assistant.log`) right after
+the failed attempt. It will tell you whether the request failed due to DNS
+resolution, an SSL/TLS error, a timeout, or a specific HTTP status code
+(401/403/404/500/...), plus a truncated (max 300 characters) response body
+for HTTP errors — enough to diagnose the problem without exposing your
+token or password.
+
 ### Entities show "unavailable"
 
 This is expected when the API returns no data for that measurement (rather
@@ -161,6 +173,8 @@ integration options) for the underlying cause once it recovers.
 ## Security note
 
 Never post your JWT, email, or password in GitHub issues, logs, or
-screenshots when reporting problems. If you enable debug logging and share
-logs, review them first — credentials and tokens are deliberately excluded
-from all log output, but request/response bodies are not logged by design.
+screenshots when reporting problems. Credentials and tokens are deliberately
+excluded from all log output. On HTTP errors, the integration does log the
+HTTP status code and up to 300 characters of the response body to help with
+debugging — review logs before sharing them, in case OBI's error responses
+ever echo back unexpected data.

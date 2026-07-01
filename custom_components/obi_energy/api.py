@@ -5,12 +5,12 @@ never logged, never persisted, and never exposed to entities or attributes.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from aiohttp import ClientError, ClientResponseError, ClientSession
-from aiohttp.client_exceptions import ClientConnectorError
+import aiohttp
 
 from .const import (
     ACCEPT_BRIDGES,
@@ -19,6 +19,7 @@ from .const import (
     API_KEY,
     BRIDGES_URL,
     HISTORICAL_DATA_URL_TEMPLATE,
+    LOGIN_COOKIE,
     LOGIN_URL,
     USER_AGENT,
 )
@@ -26,6 +27,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 30
+_MAX_LOG_BODY_CHARS = 300
 
 
 class ObiApiError(Exception):
@@ -44,12 +46,38 @@ class ObiNotFoundError(ObiApiError):
     """Raised when a resource (e.g. /bridges) returns 404."""
 
 
+def _truncate(text: str | None) -> str:
+    """Truncate a response body to a safe length for logging."""
+    if not text:
+        return "<empty body>"
+    text = text.strip()
+    if len(text) > _MAX_LOG_BODY_CHARS:
+        return text[:_MAX_LOG_BODY_CHARS] + "... [truncated]"
+    return text
+
+
+async def _safe_text(resp: aiohttp.ClientResponse) -> str:
+    """Best-effort read of a response body for logging. Never raises."""
+    try:
+        return await resp.text()
+    except (aiohttp.ClientError, UnicodeDecodeError):
+        return "<could not read body>"
+
+
+async def _log_http_error(resp: aiohttp.ClientResponse, context: str) -> None:
+    """Log the HTTP status and a truncated body. Never logs tokens/passwords."""
+    body = await _safe_text(resp)
+    _LOGGER.error(
+        "%s failed with HTTP %s: %s", context, resp.status, _truncate(body)
+    )
+
+
 class ObiApiClient:
     """Thin async client for the OBI Energy Tracking API."""
 
     def __init__(
         self,
-        session: ClientSession,
+        session: aiohttp.ClientSession,
         email: str,
         password: str,
         login_refresh_interval: int,
@@ -91,7 +119,10 @@ class ObiApiClient:
             "user-agent": USER_AGENT,
             "accept-language": ACCEPT_LANGUAGE,
             "accept-encoding": "identity",
+            "cookie": LOGIN_COOKIE,
         }
+        _LOGGER.debug("Logging in to OBI (%s)", LOGIN_URL)
+
         try:
             async with self._session.post(
                 LOGIN_URL,
@@ -100,25 +131,54 @@ class ObiApiClient:
                 timeout=_REQUEST_TIMEOUT,
             ) as resp:
                 if resp.status in (401, 403):
-                    raise ObiAuthError("Login failed: invalid credentials")
-                resp.raise_for_status()
-                data = await resp.json(content_type=None)
-        except ClientResponseError as err:
-            if err.status in (401, 403):
-                raise ObiAuthError("Login failed: invalid credentials") from err
+                    await _log_http_error(resp, "OBI login")
+                    raise ObiAuthError(
+                        f"Login failed with HTTP {resp.status}: invalid credentials"
+                    )
+                if resp.status >= 400:
+                    await _log_http_error(resp, "OBI login")
+                    raise ObiConnectionError(
+                        f"Login request failed with HTTP {resp.status}"
+                    )
+                try:
+                    data = await resp.json(content_type=None)
+                except ValueError as err:
+                    text = await _safe_text(resp)
+                    _LOGGER.error(
+                        "OBI login returned invalid JSON (HTTP %s): %s",
+                        resp.status,
+                        _truncate(text),
+                    )
+                    raise ObiConnectionError(
+                        "Received invalid response from OBI login"
+                    ) from err
+        except aiohttp.ClientConnectorDNSError as err:
+            _LOGGER.error("DNS resolution failed while logging in to OBI: %s", err)
             raise ObiConnectionError(
-                f"Login request failed with HTTP {err.status}"
+                "DNS resolution failed for the OBI login endpoint"
             ) from err
-        except ClientConnectorError as err:
-            raise ObiConnectionError("Could not connect to OBI login endpoint") from err
-        except ClientError as err:
+        except aiohttp.ClientSSLError as err:
+            _LOGGER.error("SSL/TLS error while logging in to OBI: %s", err)
+            raise ObiConnectionError(
+                "SSL/TLS error while connecting to the OBI login endpoint"
+            ) from err
+        except (asyncio.TimeoutError, aiohttp.ServerTimeoutError) as err:
+            _LOGGER.error("Timeout while logging in to OBI: %s", err)
+            raise ObiConnectionError(
+                "Timeout while connecting to the OBI login endpoint"
+            ) from err
+        except aiohttp.ClientConnectorError as err:
+            _LOGGER.error("Could not connect to the OBI login endpoint: %s", err)
+            raise ObiConnectionError(
+                "Could not connect to the OBI login endpoint"
+            ) from err
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Network error while logging in to OBI: %s", err)
             raise ObiConnectionError("Network error during OBI login") from err
-        except ValueError as err:
-            # JSON decoding failed
-            raise ObiConnectionError("Received invalid response from OBI login") from err
 
         token = data.get("token") if isinstance(data, dict) else None
         if not token:
+            _LOGGER.error("OBI login response did not contain a token")
             raise ObiAuthError("Login response did not contain a token")
 
         self._token = token
@@ -153,25 +213,49 @@ class ObiApiClient:
                     if resp.status == 401:
                         if attempt == 0:
                             _LOGGER.debug(
-                                "OBI API returned 401, refreshing token and retrying"
+                                "OBI API returned 401 for %s, refreshing token and retrying",
+                                url,
                             )
                             await self.async_login()
                             continue
+                        await _log_http_error(resp, f"OBI request to {url}")
                         raise ObiAuthError("Not authorized after refreshing token")
                     if resp.status == 404:
+                        _LOGGER.warning("OBI resource not found (HTTP 404): %s", url)
                         raise ObiNotFoundError(f"Resource not found: {url}")
-                    resp.raise_for_status()
-                    return await resp.json(content_type=None)
-            except ClientResponseError as err:
-                raise ObiConnectionError(
-                    f"Request to {url} failed with HTTP {err.status}"
-                ) from err
-            except ClientConnectorError as err:
+                    if resp.status >= 400:
+                        await _log_http_error(resp, f"OBI request to {url}")
+                        raise ObiConnectionError(
+                            f"Request to {url} failed with HTTP {resp.status}"
+                        )
+                    try:
+                        return await resp.json(content_type=None)
+                    except ValueError as err:
+                        text = await _safe_text(resp)
+                        _LOGGER.error(
+                            "OBI response for %s was not valid JSON (HTTP %s): %s",
+                            url,
+                            resp.status,
+                            _truncate(text),
+                        )
+                        raise ObiConnectionError(
+                            f"Received invalid response from {url}"
+                        ) from err
+            except aiohttp.ClientConnectorDNSError as err:
+                _LOGGER.error("DNS resolution failed requesting %s: %s", url, err)
+                raise ObiConnectionError(f"DNS resolution failed for {url}") from err
+            except aiohttp.ClientSSLError as err:
+                _LOGGER.error("SSL/TLS error requesting %s: %s", url, err)
+                raise ObiConnectionError(f"SSL/TLS error requesting {url}") from err
+            except (asyncio.TimeoutError, aiohttp.ServerTimeoutError) as err:
+                _LOGGER.error("Timeout requesting %s: %s", url, err)
+                raise ObiConnectionError(f"Timeout requesting {url}") from err
+            except aiohttp.ClientConnectorError as err:
+                _LOGGER.error("Could not connect to %s: %s", url, err)
                 raise ObiConnectionError(f"Could not connect to {url}") from err
-            except ClientError as err:
+            except aiohttp.ClientError as err:
+                _LOGGER.error("Network error requesting %s: %s", url, err)
                 raise ObiConnectionError(f"Network error requesting {url}") from err
-            except ValueError as err:
-                raise ObiConnectionError(f"Received invalid response from {url}") from err
 
         raise ObiAuthError("Not authorized after refreshing token")
 
@@ -179,6 +263,9 @@ class ObiApiClient:
         """Return the list of bridges (households) with their sensors."""
         data = await self._authenticated_get(BRIDGES_URL, accept=ACCEPT_BRIDGES)
         if not isinstance(data, list):
+            _LOGGER.error(
+                "Unexpected response type for /bridges: %s", type(data).__name__
+            )
             raise ObiConnectionError("Unexpected response format for /bridges")
         return data
 
@@ -195,5 +282,8 @@ class ObiApiClient:
         }
         data = await self._authenticated_get(url, accept=ACCEPT_HISTORICAL, params=params)
         if not isinstance(data, list):
+            _LOGGER.error(
+                "Unexpected response type for historical data: %s", type(data).__name__
+            )
             raise ObiConnectionError("Unexpected response format for historical data")
         return data

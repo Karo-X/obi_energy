@@ -1,6 +1,7 @@
 """Config flow for the OBI Energy integration."""
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -23,6 +24,8 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
@@ -87,17 +90,25 @@ class ObiEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             try:
                 await client.async_login()
-            except ObiAuthError:
+            except ObiAuthError as err:
+                _LOGGER.warning("OBI login rejected during config flow: %s", err)
                 errors["base"] = "invalid_auth"
             except ObiConnectionError:
+                _LOGGER.exception("OBI connection failed during config flow (login)")
                 errors["base"] = "cannot_connect"
             else:
                 self._client = client
                 try:
                     bridges = await client.async_get_bridges()
-                except ObiNotFoundError:
+                except ObiNotFoundError as err:
+                    _LOGGER.info(
+                        "OBI /bridges not found, falling back to manual entry: %s", err
+                    )
                     return await self.async_step_manual()
                 except ObiConnectionError:
+                    _LOGGER.exception(
+                        "OBI connection failed during config flow (bridges)"
+                    )
                     errors["base"] = "cannot_connect"
                 else:
                     pairs = _flatten_bridges(bridges)
@@ -143,9 +154,15 @@ class ObiEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self._client.async_get_historical_data(
                     hh_id, mid_id, DEFAULT_HISTORICAL_DURATION
                 )
-            except ObiNotFoundError:
+            except ObiNotFoundError as err:
+                _LOGGER.warning(
+                    "OBI historical data not found for manual hh_id/mid_id: %s", err
+                )
                 errors["base"] = "invalid_ids"
             except ObiConnectionError:
+                _LOGGER.exception(
+                    "OBI connection failed during config flow (manual validation)"
+                )
                 errors["base"] = "cannot_connect"
             else:
                 return await self._async_create_entry(hh_id, mid_id)
@@ -193,9 +210,11 @@ class ObiEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             try:
                 await client.async_login()
-            except ObiAuthError:
+            except ObiAuthError as err:
+                _LOGGER.warning("OBI reauth login rejected: %s", err)
                 errors["base"] = "invalid_auth"
             except ObiConnectionError:
+                _LOGGER.exception("OBI connection failed during reauth confirm")
                 errors["base"] = "cannot_connect"
             else:
                 new_data = {**self._reauth_entry.data, CONF_PASSWORD: password}
@@ -237,9 +256,11 @@ class ObiEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             try:
                 await client.async_login()
-            except ObiAuthError:
+            except ObiAuthError as err:
+                _LOGGER.warning("OBI reconfigure login rejected: %s", err)
                 errors["base"] = "invalid_auth"
             except ObiConnectionError:
+                _LOGGER.exception("OBI connection failed during reconfigure confirm")
                 errors["base"] = "cannot_connect"
             else:
                 new_data = {**entry.data, CONF_EMAIL: email, CONF_PASSWORD: password}

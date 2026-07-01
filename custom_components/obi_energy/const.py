@@ -25,6 +25,7 @@ HISTORICAL_DATA_URL_TEMPLATE = API_BASE_URL + "/historical-data/{hh_id}/{mid_id}
 API_KEY = "Rh57q3vtOPYTf6FtArVN1boy2AyEiIqaGEmnMks7"
 USER_AGENT = "heyOBI APP / iPhone17,2 / 4.9.1 / 560"
 ACCEPT_LANGUAGE = "de-DE,de;q=0.9"
+LOGIN_COOKIE = "obi_storeid=527"
 ACCEPT_BRIDGES = "application/vnd.obi.companion.energy-tracking.bridge.v1+json"
 ACCEPT_HISTORICAL = "application/vnd.obi.companion.energy-tracking.historical-record.v1+json"
 
