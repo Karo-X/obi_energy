@@ -67,13 +67,21 @@ reporting `0`, so your Energy Dashboard statistics stay accurate.
 This integration is not (yet) in the default HACS store, so it needs to be
 added as a **custom repository**:
 
+**HACS → Custom repositories → URL `https://github.com/Karo-X/obi_energy` →
+Category `Integration` → Install → Restart Home Assistant → Settings →
+Devices & Services → Add Integration → OBI Energy.**
+
+Spelled out:
+
 1. Open **HACS → Integrations** in Home Assistant.
 2. Click the **⋮** (three-dot) menu in the top right corner and choose
    **Custom repositories**.
-3. Add this repository's URL (`https://github.com/karo-x/obi_energy`) and
+3. Add this repository's URL (`https://github.com/Karo-X/obi_energy`) and
    select category **Integration**, then **Add**.
-4. Find **OBI Energy** in HACS and click **Download**.
+4. Find **OBI Energy** in HACS and click **Install**.
 5. Restart Home Assistant.
+6. Go to **Settings → Devices & Services → Add Integration** and search for
+   **OBI Energy**.
 
 ### Manual
 
@@ -190,6 +198,10 @@ instead of a brand logo — this is expected and intentional.
 ## Release notes
 
 See [CHANGELOG.md](CHANGELOG.md) for the version history.
+
+## License
+
+[MIT](LICENSE)
 
 ## Security note
 

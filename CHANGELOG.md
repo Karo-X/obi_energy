@@ -1,15 +1,26 @@
 # Changelog
 
-All notable changes to the OBI Energy integration are documented in this file.
+## v0.1.0
 
-## [0.1.0] - 2026-07-01
+Initial working release:
+- UI config flow
+- OBI login with country=de
+- JWT kept only in memory
+- bridge discovery
+- energy and feed-in sensors
+- kWh sensors compatible with HA Energy Dashboard
+- diagnostics sensors
+- automatic token refresh / 401 retry
+- debug logging without token/password leakage
+
+### Details
 
 First tagged release. The integration is fully config-flow based (no YAML),
 logs into the OBI/heyOBI Energy Tracking API, discovers the bridge/sensor,
 and exposes native Home Assistant entities for consumption, feed-in, battery,
 connectivity and diagnostics.
 
-### Added
+#### Added
 
 - Config flow: email/password entry, automatic bridge/sensor discovery with
   a picker for multiple bridges, and a manual `HH_ID`/`MID_ID` fallback when
@@ -30,7 +41,7 @@ connectivity and diagnostics.
   entity names.
 - `hacs.json` for HACS custom-repository installation.
 
-### Fixed
+#### Fixed
 
 - Login now sends the exact request shape confirmed via a mitmproxy capture
   of the real heyOBI app: a compact JSON body (`{"password", "country":
@@ -45,7 +56,9 @@ connectivity and diagnostics.
   timeout, HTTP status with response headers/truncated body, JSON decode
   errors) instead of a generic "cannot connect", without ever logging
   tokens, passwords, or full request bodies.
-- Device info is now consistent across all entities (`manufacturer: "OBI"`,
-  `model: "heyOBI Energy Tracking"`, device name `"OBI Energy"`), and entity
-  names use `translation_key` so they render correctly per language instead
-  of duplicating the device name.
+- Device info is consistent across all entities (`manufacturer: "OBI"`,
+  `model: "heyOBI Energy Tracking"`, device name `"OBI Energy Bridge"`), and
+  entity names use `translation_key` so they render correctly per language.
+  Each entity's `entity_id` is pinned via `suggested_object_id` (e.g.
+  `sensor.obi_energy`) so it stays short and stable regardless of the
+  translated display name.

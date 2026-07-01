@@ -53,7 +53,7 @@ class ObiBridgeOnlineBinarySensor(
         self._attr_suggested_object_id = "obi_bridge_online"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{coordinator.hh_id}_{coordinator.mid_id}")},
-            name="OBI Energy",
+            name="OBI Energy Bridge",
             manufacturer="OBI",
             model="heyOBI Energy Tracking",
         )
