@@ -21,6 +21,9 @@ from .const import (
     BRIDGES_URL,
     HISTORICAL_DATA_URL_TEMPLATE,
     LOGIN_COOKIE,
+    LOGIN_HOST,
+    LOGIN_ORIGIN,
+    LOGIN_REFERER,
     LOGIN_URL,
     USER_AGENT,
 )
@@ -122,6 +125,17 @@ class ObiApiClient:
 
     async def async_login(self) -> None:
         """Log in to OBI and store the resulting JWT in memory only."""
+        # Serialize the body ourselves - compact, no whitespace - and send it
+        # via `data=` (like the previously working YAML REST sensor did),
+        # instead of aiohttp's `json=` shortcut, which re-derives its own
+        # content-type/content-length handling and can conflict with the
+        # exact headers OBI (and the CloudFront in front of it) expect.
+        payload = json.dumps(
+            {"email": self._email, "password": self._password},
+            separators=(",", ":"),
+        )
+        payload_bytes = payload.encode("utf-8")
+
         headers = {
             "content-type": "application/json",
             "accept": "*/*",
@@ -129,19 +143,17 @@ class ObiApiClient:
             "accept-language": ACCEPT_LANGUAGE,
             "accept-encoding": "identity",
             "cookie": LOGIN_COOKIE,
+            "content-length": str(len(payload_bytes)),
+            "host": LOGIN_HOST,
+            "origin": LOGIN_ORIGIN,
+            "referer": LOGIN_REFERER,
         }
         _LOGGER.debug("Logging in to OBI (%s)", LOGIN_URL)
-
-        # Serialize the body ourselves and send it via `data=` (like the
-        # previously working YAML REST sensor did), instead of aiohttp's
-        # `json=` shortcut, which re-derives its own content-type handling
-        # and can conflict with the exact headers OBI expects.
-        payload = json.dumps({"email": self._email, "password": self._password})
 
         try:
             async with self._session.post(
                 LOGIN_URL,
-                data=payload,
+                data=payload_bytes,
                 headers=headers,
                 timeout=_REQUEST_TIMEOUT,
             ) as resp:
