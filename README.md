@@ -186,14 +186,18 @@ integration options) for the underlying cause once it recovers.
 
 ## Icon & branding
 
-This integration does **not** bundle an OBI/heyOBI logo — trademark and
-usage rights for OBI's branding are unclear for a community project, so no
-`icon.png`/`logo.png` is included. Entities instead use Home Assistant's
-built-in Material Design Icons (e.g. `mdi:transmission-tower` for the bridge
-connection-strength sensor); most other entities get a sensible default icon
-from their `device_class` (energy, battery, connectivity, timestamp). In the
-integrations list, Home Assistant/HACS will show a generic placeholder icon
-instead of a brand logo — this is expected and intentional.
+This integration does **not** bundle an official OBI/heyOBI logo — trademark
+and usage rights for OBI's branding are unclear for a community project.
+Entities use Home Assistant's built-in Material Design Icons (e.g.
+`mdi:transmission-tower` for the bridge connection-strength sensor); most
+other entities get a sensible default icon from their `device_class`
+(energy, battery, connectivity, timestamp).
+
+`custom_components/obi_energy/brand/icon.png` and `icon@2x.png` contain a
+small, self-drawn, neutral lightning-bolt glyph (not OBI's logo, not OBI's
+brand colors) — this only exists to satisfy HACS's automated brand-assets
+check for repository validation and is not, and is not meant to look like,
+official OBI branding.
 
 ## Release notes
 
