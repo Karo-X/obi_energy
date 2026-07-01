@@ -6,6 +6,7 @@ never logged, never persisted, and never exposed to entities or attributes.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -65,10 +66,18 @@ async def _safe_text(resp: aiohttp.ClientResponse) -> str:
 
 
 async def _log_http_error(resp: aiohttp.ClientResponse, context: str) -> None:
-    """Log the HTTP status and a truncated body. Never logs tokens/passwords."""
+    """Log HTTP status, response headers and a truncated body.
+
+    Only the server's *response* headers are logged (never the request
+    headers we sent), so no cookie, token or password ever ends up here.
+    """
     body = await _safe_text(resp)
     _LOGGER.error(
-        "%s failed with HTTP %s: %s", context, resp.status, _truncate(body)
+        "%s failed with HTTP %s. Response headers: %s. Response body: %s",
+        context,
+        resp.status,
+        dict(resp.headers),
+        _truncate(body),
     )
 
 
@@ -123,10 +132,16 @@ class ObiApiClient:
         }
         _LOGGER.debug("Logging in to OBI (%s)", LOGIN_URL)
 
+        # Serialize the body ourselves and send it via `data=` (like the
+        # previously working YAML REST sensor did), instead of aiohttp's
+        # `json=` shortcut, which re-derives its own content-type handling
+        # and can conflict with the exact headers OBI expects.
+        payload = json.dumps({"email": self._email, "password": self._password})
+
         try:
             async with self._session.post(
                 LOGIN_URL,
-                json={"email": self._email, "password": self._password},
+                data=payload,
                 headers=headers,
                 timeout=_REQUEST_TIMEOUT,
             ) as resp:
