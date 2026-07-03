@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -49,6 +50,26 @@ class ObiConnectionError(ObiApiError):
 
 class ObiNotFoundError(ObiApiError):
     """Raised when a resource (e.g. /bridges) returns 404."""
+
+
+_ISO8601_DURATION_RE = re.compile(
+    r"^P(?:(?P<days>\d+)D)?"
+    r"(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?)?$"
+)
+
+
+def _parse_iso8601_duration(duration: str) -> timedelta:
+    """Parse a simple ISO 8601 duration (e.g. PT6H, P1D) into a timedelta."""
+    match = _ISO8601_DURATION_RE.match(duration.strip())
+    if not match or not any(match.groups()):
+        raise ValueError(f"Unsupported ISO 8601 duration: {duration!r}")
+    parts = {key: int(value) for key, value in match.groupdict(default="0").items()}
+    return timedelta(
+        days=parts["days"],
+        hours=parts["hours"],
+        minutes=parts["minutes"],
+        seconds=parts["seconds"],
+    )
 
 
 def _truncate(text: str | None) -> str:
@@ -312,10 +333,19 @@ class ObiApiClient:
     ) -> list[dict[str, Any]]:
         """Return historical measurements for the given bridge/sensor."""
         url = HISTORICAL_DATA_URL_TEMPLATE.format(hh_id=hh_id, mid_id=mid_id)
-        end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+        try:
+            delta = _parse_iso8601_duration(duration)
+        except ValueError as err:
+            _LOGGER.error("Invalid historical duration %r: %s", duration, err)
+            raise ObiConnectionError(f"Invalid historical duration: {duration}") from err
+
+        # OBI's API expects a single ISO 8601 time interval
+        # (<start>/<duration>), not separate end/duration parameters.
+        start = datetime.now(timezone.utc) - delta
+        start_str = start.strftime("%Y-%m-%dT%H:%M:%S.000Z")
         params = {
-            "end": end,
-            "duration": duration,
+            "duration": f"{start_str}/{duration}",
             "measures": "energy,negative_energy",
         }
         data = await self._authenticated_get(url, accept=ACCEPT_HISTORICAL, params=params)
