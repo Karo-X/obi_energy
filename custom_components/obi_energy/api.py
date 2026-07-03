@@ -355,6 +355,7 @@ class ObiApiClient:
                     headers=headers,
                     timeout=_REQUEST_TIMEOUT,
                     heartbeat=30,
+                    compress=15,
                 )
             except aiohttp.WSServerHandshakeError as err:
                 if err.status == 401 and attempt == 0:

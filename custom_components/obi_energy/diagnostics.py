@@ -50,6 +50,8 @@ async def async_get_config_entry_diagnostics(
             "power": data.live_power if data else None,
             "rssi": data.live_rssi if data else None,
             "battery": data.live_battery if data else None,
+            "connected": data.live_connected if data else None,
+            "last_error": data.live_last_error if data else None,
             "last_message_at": data.live_last_message_at.isoformat()
             if data and data.live_last_message_at
             else None,

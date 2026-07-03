@@ -35,6 +35,8 @@ class ObiEnergyData:
     live_rssi: int | None = None
     live_battery: int | None = None
     live_last_message_at: datetime | None = None
+    live_connected: bool = False
+    live_last_error: str | None = None
 
 
 def _latest_measurement(
@@ -163,6 +165,8 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
             live_last_message_at=current_data.live_last_message_at
             if current_data
             else None,
+            live_connected=current_data.live_connected if current_data else False,
+            live_last_error=current_data.live_last_error if current_data else None,
         )
 
     async def _async_live_update_loop(self) -> None:
@@ -175,27 +179,36 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
                     self.hh_id, self.mid_id
                 )
                 _LOGGER.debug("OBI live WebSocket connected")
+                self._set_live_connection_state(connected=True, error=None)
                 try:
                     async for msg in websocket:
                         if self._live_stop.is_set():
                             break
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             self._handle_live_message(msg.data)
+                        elif msg.type == aiohttp.WSMsgType.BINARY:
+                            self._handle_live_message(msg.data.decode("utf-8"))
                         elif msg.type == aiohttp.WSMsgType.ERROR:
-                            _LOGGER.warning(
-                                "OBI live WebSocket error: %s", websocket.exception()
+                            error = str(websocket.exception())
+                            _LOGGER.warning("OBI live WebSocket error: %s", error)
+                            self._set_live_connection_state(
+                                connected=False, error=error
                             )
                             break
                 finally:
+                    self._set_live_connection_state(connected=False)
                     await websocket.close()
             except ObiAuthError as err:
                 _LOGGER.warning("OBI live WebSocket authentication failed: %s", err)
+                self._set_live_connection_state(connected=False, error=str(err))
             except ObiApiError as err:
                 _LOGGER.warning("OBI live WebSocket connection failed: %s", err)
+                self._set_live_connection_state(connected=False, error=str(err))
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as err:
                 _LOGGER.exception("Unexpected error in OBI live WebSocket listener")
+                self._set_live_connection_state(connected=False, error=str(err))
 
             if not self._live_stop.is_set():
                 try:
@@ -207,22 +220,43 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
 
     def _handle_live_message(self, raw_message: str) -> None:
         """Update coordinator data from a live WebSocket JSON message."""
-        try:
-            message = json.loads(raw_message)
-        except ValueError:
-            _LOGGER.debug("Ignoring invalid OBI live WebSocket message")
-            return
+        handled = False
+        decoder = json.JSONDecoder()
+        position = 0
 
+        while position < len(raw_message):
+            while position < len(raw_message) and raw_message[position].isspace():
+                position += 1
+
+            if position >= len(raw_message):
+                break
+
+            try:
+                message, position = decoder.raw_decode(raw_message, position)
+            except ValueError:
+                _LOGGER.debug(
+                    "Ignoring invalid OBI live WebSocket message: %r", raw_message
+                )
+                break
+
+            if self._handle_live_json_message(message):
+                handled = True
+
+        if not handled:
+            _LOGGER.debug("OBI live WebSocket message contained no live reading")
+
+    def _handle_live_json_message(self, message: Any) -> bool:
+        """Update coordinator data from one decoded live WebSocket message."""
         if not isinstance(message, dict) or message.get("event") != "mqttMessage":
-            return
+            return False
 
         payload = message.get("data")
         if not isinstance(payload, dict):
-            return
+            return False
 
         current_data = self.data
         if current_data is None:
-            return
+            return False
 
         self.async_set_updated_data(
             replace(
@@ -231,5 +265,31 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
                 live_rssi=payload.get("rssi", current_data.live_rssi),
                 live_battery=payload.get("battery", current_data.live_battery),
                 live_last_message_at=datetime.now(timezone.utc),
+                live_last_error=None,
+            )
+        )
+        _LOGGER.debug(
+            "OBI live reading received: power=%s rssi=%s battery=%s",
+            payload.get("power"),
+            payload.get("rssi"),
+            payload.get("battery"),
+        )
+        return True
+
+    def _set_live_connection_state(
+        self, *, connected: bool, error: str | None = None
+    ) -> None:
+        """Store live WebSocket connection state for diagnostics."""
+        current_data = self.data
+        if current_data is None:
+            return
+
+        self.async_set_updated_data(
+            replace(
+                current_data,
+                live_connected=connected,
+                live_last_error=error
+                if error is not None
+                else current_data.live_last_error,
             )
         )

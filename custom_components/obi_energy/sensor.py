@@ -259,6 +259,16 @@ class ObiLivePowerSensor(ObiEnergyBaseEntity):
         """Return the latest live power value."""
         return self.coordinator.data.live_power
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose live-stream diagnostics."""
+        data = self.coordinator.data
+        return {
+            "live_connected": data.live_connected,
+            "live_last_error": data.live_last_error,
+            "live_last_message_at": data.live_last_message_at,
+        }
+
 
 class ObiLiveRssiSensor(ObiEnergyBaseEntity):
     """Live RSSI from the bridge sensor."""
