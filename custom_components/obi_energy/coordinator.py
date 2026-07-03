@@ -102,6 +102,16 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
         energy = _latest_measurement(historical, MEASURE_ENERGY)
         negative_energy = _latest_measurement(historical, MEASURE_NEGATIVE_ENERGY)
 
+        _LOGGER.debug(
+            "Historical data poll: %d record(s) returned; latest energy=%s "
+            "(value=%s); latest negative_energy=%s (value=%s)",
+            len(historical),
+            energy.get("timestamp") if energy else None,
+            energy.get("value") if energy else None,
+            negative_energy.get("timestamp") if negative_energy else None,
+            negative_energy.get("value") if negative_energy else None,
+        )
+
         return ObiEnergyData(
             sensor_info=sensor_info,
             energy=energy,

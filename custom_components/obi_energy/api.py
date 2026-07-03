@@ -225,6 +225,12 @@ class ObiApiClient:
             "Accept": accept,
             "accept-language": ACCEPT_LANGUAGE,
             "user-agent": USER_AGENT,
+            # OBI's API is fronted by CloudFront. Ask it (and any
+            # intermediate cache) to not serve a stale cached response for
+            # historical-data polls, which otherwise can appear to "stop
+            # updating" even though fresh readings exist upstream.
+            "cache-control": "no-cache",
+            "pragma": "no-cache",
         }
 
     async def _ensure_logged_in(self) -> None:
