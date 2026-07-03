@@ -252,7 +252,12 @@ class ObiLivePowerSensor(ObiEnergyBaseEntity):
     @property
     def available(self) -> bool:
         """Return True once a live power reading has arrived."""
-        return super().available and self.coordinator.data.live_power is not None
+        data = self.coordinator.data
+        return (
+            super().available
+            and data.live_power is not None
+            and not data.live_stale
+        )
 
     @property
     def native_value(self) -> int | float | None:
@@ -267,6 +272,8 @@ class ObiLivePowerSensor(ObiEnergyBaseEntity):
             "live_connected": data.live_connected,
             "live_last_error": data.live_last_error,
             "live_last_message_at": data.live_last_message_at,
+            "live_stale": data.live_stale,
+            "live_upload_interval": data.live_upload_interval,
         }
 
 

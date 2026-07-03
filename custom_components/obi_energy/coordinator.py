@@ -21,6 +21,9 @@ from .const import DOMAIN, MEASURE_ENERGY, MEASURE_NEGATIVE_ENERGY
 _LOGGER = logging.getLogger(__name__)
 
 _LIVE_RECONNECT_DELAY = 10
+_LIVE_UPLOAD_INTERVAL = 2
+_LIVE_STALE_AFTER = timedelta(seconds=90)
+_LIVE_STALE_CHECK_INTERVAL = 15
 
 
 @dataclass
@@ -37,6 +40,8 @@ class ObiEnergyData:
     live_last_message_at: datetime | None = None
     live_connected: bool = False
     live_last_error: str | None = None
+    live_stale: bool = False
+    live_upload_interval: int | None = None
 
 
 def _latest_measurement(
@@ -79,6 +84,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
         self.mid_id = mid_id
         self.historical_duration = historical_duration
         self._live_task: asyncio.Task[None] | None = None
+        self._live_stale_task: asyncio.Task[None] | None = None
         self._live_stop: asyncio.Event | None = None
 
     async def async_start_live_updates(self) -> None:
@@ -90,23 +96,28 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
             self._async_live_update_loop(),
             name=f"{DOMAIN}_live_updates",
         )
+        self._live_stale_task = self.hass.async_create_task(
+            self._async_live_stale_watchdog(),
+            name=f"{DOMAIN}_live_stale_watchdog",
+        )
 
     async def async_stop_live_updates(self) -> None:
         """Stop the live-data listener."""
         if self._live_stop is not None:
             self._live_stop.set()
 
-        if self._live_task is None:
-            return
+        for task in (self._live_task, self._live_stale_task):
+            if task is None:
+                continue
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
-        self._live_task.cancel()
-        try:
-            await self._live_task
-        except asyncio.CancelledError:
-            pass
-        finally:
-            self._live_task = None
-            self._live_stop = None
+        self._live_task = None
+        self._live_stale_task = None
+        self._live_stop = None
 
     async def _async_update_data(self) -> ObiEnergyData:
         """Fetch the latest bridge status and historical measurements."""
@@ -167,6 +178,10 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
             else None,
             live_connected=current_data.live_connected if current_data else False,
             live_last_error=current_data.live_last_error if current_data else None,
+            live_stale=current_data.live_stale if current_data else False,
+            live_upload_interval=current_data.live_upload_interval
+            if current_data
+            else None,
         )
 
     async def _async_live_update_loop(self) -> None:
@@ -175,6 +190,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
 
         while not self._live_stop.is_set():
             try:
+                await self._async_enable_live_mode()
                 websocket = await self.client.async_connect_live_data(
                     self.hh_id, self.mid_id
                 )
@@ -266,6 +282,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
                 live_battery=payload.get("battery", current_data.live_battery),
                 live_last_message_at=datetime.now(timezone.utc),
                 live_last_error=None,
+                live_stale=False,
             )
         )
         _LOGGER.debug(
@@ -291,5 +308,68 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
                 live_last_error=error
                 if error is not None
                 else current_data.live_last_error,
+            )
+        )
+
+    async def _async_live_stale_watchdog(self) -> None:
+        """Mark live data stale when no live readings arrive for a while."""
+        assert self._live_stop is not None
+
+        while not self._live_stop.is_set():
+            try:
+                await asyncio.wait_for(
+                    self._live_stop.wait(), timeout=_LIVE_STALE_CHECK_INTERVAL
+                )
+                continue
+            except asyncio.TimeoutError:
+                pass
+
+            current_data = self.data
+            if (
+                current_data is None
+                or current_data.live_last_message_at is None
+                or current_data.live_stale
+            ):
+                continue
+
+            if (
+                datetime.now(timezone.utc) - current_data.live_last_message_at
+                < _LIVE_STALE_AFTER
+            ):
+                continue
+
+            _LOGGER.debug("OBI live reading is stale; no message received recently")
+            self.async_set_updated_data(replace(current_data, live_stale=True))
+            try:
+                await self._async_enable_live_mode()
+            except ObiAuthError as err:
+                _LOGGER.warning("OBI live mode activation failed: %s", err)
+                self._set_live_connection_state(connected=False, error=str(err))
+            except ObiApiError as err:
+                _LOGGER.warning("OBI live mode activation failed: %s", err)
+                self._set_live_connection_state(connected=False, error=str(err))
+
+    async def _async_enable_live_mode(self) -> None:
+        """Ask the OBI backend to make the sensor publish live readings."""
+        sensor = await self.client.async_set_sensor_upload_interval(
+            self.mid_id, _LIVE_UPLOAD_INTERVAL
+        )
+        upload_interval = sensor.get("uploadInterval")
+        _LOGGER.debug(
+            "OBI live mode requested: uploadInterval=%s", upload_interval
+        )
+
+        current_data = self.data
+        if current_data is None:
+            return
+
+        self.async_set_updated_data(
+            replace(
+                current_data,
+                sensor_info=sensor,
+                live_upload_interval=upload_interval
+                if isinstance(upload_interval, int)
+                else _LIVE_UPLOAD_INTERVAL,
+                live_last_error=None,
             )
         )
