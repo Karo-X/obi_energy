@@ -16,7 +16,13 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import ObiApiClient, ObiApiError, ObiAuthError, ObiNotFoundError
-from .const import DOMAIN, MEASURE_ENERGY, MEASURE_NEGATIVE_ENERGY
+from .const import (
+    DOMAIN,
+    LIVE_UPLOAD_INTERVAL_DISABLED,
+    LIVE_UPLOAD_INTERVAL_ENABLED,
+    MEASURE_ENERGY,
+    MEASURE_NEGATIVE_ENERGY,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,7 +76,6 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
         update_interval: int,
         historical_duration: str,
         live_enabled: bool,
-        live_upload_interval: int,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -85,7 +90,11 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
         self.mid_id = mid_id
         self.historical_duration = historical_duration
         self.live_enabled = live_enabled
-        self.live_upload_interval = live_upload_interval
+        self.live_upload_interval = (
+            LIVE_UPLOAD_INTERVAL_ENABLED
+            if live_enabled
+            else LIVE_UPLOAD_INTERVAL_DISABLED
+        )
         self._live_task: asyncio.Task[None] | None = None
         self._live_stale_task: asyncio.Task[None] | None = None
         self._live_stop: asyncio.Event | None = None
@@ -106,6 +115,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
 
     async def async_stop_live_updates(self) -> None:
         """Stop the live-data listener."""
+        had_live_task = self._live_task is not None
         if self._live_stop is not None:
             self._live_stop.set()
 
@@ -121,6 +131,8 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
         self._live_task = None
         self._live_stale_task = None
         self._live_stop = None
+        if had_live_task:
+            await self.async_disable_live_mode()
 
     async def _async_update_data(self) -> ObiEnergyData:
         """Fetch the latest bridge status and historical measurements."""
@@ -355,7 +367,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
     async def _async_enable_live_mode(self) -> None:
         """Ask the OBI backend to make the sensor publish live readings."""
         sensor = await self.client.async_set_sensor_upload_interval(
-            self.mid_id, self.live_upload_interval
+            self.mid_id, LIVE_UPLOAD_INTERVAL_ENABLED
         )
         upload_interval = sensor.get("uploadInterval")
         _LOGGER.debug(
@@ -372,7 +384,47 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
                 sensor_info=sensor,
                 live_upload_interval=upload_interval
                 if isinstance(upload_interval, int)
-                else self.live_upload_interval,
+                else LIVE_UPLOAD_INTERVAL_ENABLED,
                 live_last_error=None,
+            )
+        )
+
+    async def async_disable_live_mode(self) -> None:
+        """Ask the OBI backend to leave live mode and return to normal uploads."""
+        try:
+            sensor = await self.client.async_set_sensor_upload_interval(
+                self.mid_id, LIVE_UPLOAD_INTERVAL_DISABLED
+            )
+        except ObiAuthError as err:
+            _LOGGER.warning("OBI live mode deactivation failed: %s", err)
+            self._set_live_connection_state(connected=False, error=str(err))
+            return
+        except ObiApiError as err:
+            _LOGGER.warning("OBI live mode deactivation failed: %s", err)
+            self._set_live_connection_state(connected=False, error=str(err))
+            return
+
+        upload_interval = sensor.get("uploadInterval")
+        _LOGGER.debug(
+            "OBI live mode stopped: uploadInterval=%s", upload_interval
+        )
+
+        current_data = self.data
+        self.live_upload_interval = (
+            upload_interval
+            if isinstance(upload_interval, int)
+            else LIVE_UPLOAD_INTERVAL_DISABLED
+        )
+        if current_data is None:
+            return
+
+        self.async_set_updated_data(
+            replace(
+                current_data,
+                sensor_info=sensor,
+                live_connected=False,
+                live_upload_interval=self.live_upload_interval,
+                live_last_error=None,
+                live_stale=True,
             )
         )

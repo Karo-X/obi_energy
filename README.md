@@ -123,10 +123,10 @@ After setup, click **Configure** on the integration to adjust:
 - **Login refresh interval** (default: 55 minutes) — how often the session
   token is proactively renewed, independent of the 401-triggered refresh
 - **Historical data duration** (default: `PT6H`, ISO 8601 duration)
-- **Enable live tracking** (default: enabled) — turns the live WebSocket and
-  live-mode activation request on or off
-- **Live upload interval** (default: 2 seconds) — the interval requested from
-  the OBI sensor before opening the live WebSocket
+- **Enable live tracking** (default: disabled) — turns the live WebSocket and
+  live-mode activation request on or off. Enabling requests OBI's 2-second
+  live upload interval; disabling closes the live stream and restores the
+  normal 300-second upload interval.
 - **Debug logging**
 - **Manual `HH_ID` / `MID_ID` overrides** (useful if `/bridges` starts
   failing after setup)

@@ -15,13 +15,11 @@ from .const import (
     CONF_HISTORICAL_DURATION,
     CONF_LOGIN_REFRESH_INTERVAL,
     CONF_LIVE_ENABLED,
-    CONF_LIVE_UPLOAD_INTERVAL,
     CONF_MID_ID,
     DEFAULT_DEBUG,
     DEFAULT_HISTORICAL_DURATION,
     DEFAULT_LOGIN_REFRESH_INTERVAL,
     DEFAULT_LIVE_ENABLED,
-    DEFAULT_LIVE_UPLOAD_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
@@ -59,9 +57,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         CONF_HISTORICAL_DURATION, DEFAULT_HISTORICAL_DURATION
     )
     live_enabled = options.get(CONF_LIVE_ENABLED, DEFAULT_LIVE_ENABLED)
-    live_upload_interval = options.get(
-        CONF_LIVE_UPLOAD_INTERVAL, DEFAULT_LIVE_UPLOAD_INTERVAL
-    )
 
     coordinator = ObiEnergyCoordinator(
         hass,
@@ -72,7 +67,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         scan_interval,
         historical_duration,
         live_enabled,
-        live_upload_interval,
     )
 
     await coordinator.async_config_entry_first_refresh()
@@ -82,6 +76,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     if live_enabled:
         await coordinator.async_start_live_updates()
+    else:
+        await coordinator.async_disable_live_mode()
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     return True

@@ -61,7 +61,6 @@
           "login_refresh_interval": "Login-Refresh-Intervall (Sekunden)",
           "historical_duration": "Zeitraum Messwerte (ISO 8601, z. B. PT6H)",
           "live_enabled": "Live-Tracking aktivieren",
-          "live_upload_interval": "Live-Upload-Intervall (Sekunden, Standard: 2)",
           "debug": "Debug-Logging aktivieren",
           "hh_id": "Haushalts-ID (HH_ID) überschreiben",
           "mid_id": "Sensor-ID (MID_ID) überschreiben"
