@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to OBI Energy",
-        "description": "Enter the email address and password you use for the heyOBI app. Your credentials are stored securely in Home Assistant's config entry storage, never in YAML, and are only used to obtain a session token.",
+        "description": "Enter the email address and password you use for the heyOBI app. Your credentials are stored securely in Home Assistant's config entry storage, never in YAML, and are only used to obtain a session token. After setup, you can use \"Configure\" on the integration to adjust the scan interval and historical data duration.",
         "data": {
           "email": "OBI email",
           "password": "OBI password"
@@ -55,11 +55,11 @@
     "step": {
       "init": {
         "title": "OBI Energy options",
-        "description": "Configure how often data is fetched and refreshed.",
+        "description": "Configure how often data is fetched and refreshed. Keep the historical data duration small (e.g. PT15M) - larger windows (like PT6H) have been observed to make OBI's API return older data instead of the latest reading.",
         "data": {
           "scan_interval": "Measurement scan interval (seconds)",
           "login_refresh_interval": "Login refresh interval (seconds)",
-          "historical_duration": "Historical data duration (ISO 8601, e.g. PT6H)",
+          "historical_duration": "Historical data duration (ISO 8601, e.g. PT15M)",
           "live_enabled": "Enable live tracking",
           "debug": "Enable debug logging",
           "hh_id": "Override household ID (HH_ID)",

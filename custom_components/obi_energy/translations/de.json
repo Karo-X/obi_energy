@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Mit OBI Energy verbinden",
-        "description": "Gib die E-Mail-Adresse und das Passwort ein, die du auch für die heyOBI-App verwendest. Deine Zugangsdaten werden sicher im Config Entry von Home Assistant gespeichert, niemals in YAML, und nur verwendet, um ein Sitzungs-Token zu erhalten.",
+        "description": "Gib die E-Mail-Adresse und das Passwort ein, die du auch für die heyOBI-App verwendest. Deine Zugangsdaten werden sicher im Config Entry von Home Assistant gespeichert, niemals in YAML, und nur verwendet, um ein Sitzungs-Token zu erhalten. Nach dem Setup kannst du über \"Configure\" das Abfrageintervall und den Zeitraum der Messwerte anpassen.",
         "data": {
           "email": "OBI E-Mail",
           "password": "OBI Passwort"
@@ -55,11 +55,11 @@
     "step": {
       "init": {
         "title": "OBI Energy Optionen",
-        "description": "Konfiguriere, wie oft Daten abgerufen und Zugangsdaten erneuert werden.",
+        "description": "Konfiguriere, wie oft Daten abgerufen und Zugangsdaten erneuert werden. Halte den Zeitraum für Messwerte klein (z. B. PT15M) - bei größeren Zeitfenstern (z. B. PT6H) liefert OBIs API teils ältere Werte statt der aktuellsten Messung.",
         "data": {
           "scan_interval": "Abfrageintervall Messwerte (Sekunden)",
           "login_refresh_interval": "Login-Refresh-Intervall (Sekunden)",
-          "historical_duration": "Zeitraum Messwerte (ISO 8601, z. B. PT6H)",
+          "historical_duration": "Zeitraum Messwerte (ISO 8601, z. B. PT15M)",
           "live_enabled": "Live-Tracking aktivieren",
           "debug": "Debug-Logging aktivieren",
           "hh_id": "Haushalts-ID (HH_ID) überschreiben",

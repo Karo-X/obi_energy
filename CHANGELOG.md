@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.1.2
+
+Reduces the default `historical_duration` from `PT6H` to `PT15M`.
+
+Community testing (see the OBI Energy Tracker thread on photovoltaikforum.de)
+found that a large historical-data window like `PT6H` can make OBI's API
+return older data instead of the latest reading, even with the v0.1.1 fix
+applied — the symptom looks identical to issue #10 but is caused by the
+window size itself, not the request format. Users who already changed
+`historical_duration` in the options manually are unaffected; this only
+changes the out-of-the-box default for new setups. The options description
+now also documents this tradeoff directly in the UI.
+
+## v0.1.1
+
+Fixes #10 (energy/negative_energy measurements stop updating even though
+the OBI app shows fresh readings):
+
+- `/historical-data` now sends a single ISO 8601 `<start>/<duration>`
+  interval as one `duration` parameter, instead of separate `end=`/
+  `duration=` query parameters - matching the request shape confirmed to
+  work in another OBI HACS integration. The previous two-parameter form
+  may not have been parsed correctly by OBI's backend.
+- Added `Cache-Control: no-cache` / `Pragma: no-cache` headers on every
+  authenticated request, in case CloudFront (which fronts OBI's API) was
+  serving a stale cached response.
+- Added debug-level logging of each historical-data poll (record count,
+  latest energy/negative_energy timestamp and value) to help diagnose any
+  remaining staleness directly from the Home Assistant log.
+
 ## v0.1.0
 
 Initial working release:
