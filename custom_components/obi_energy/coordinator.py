@@ -105,6 +105,11 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
         self._live_stale_task: asyncio.Task[None] | None = None
         self._live_stop: asyncio.Event | None = None
 
+    def _set_live_data(self, data: ObiEnergyData) -> None:
+        """Publish live-only data without rescheduling the historical poll."""
+        self.data = data
+        self.async_update_listeners()
+
     async def async_start_live_updates(self) -> None:
         """Start listening for live power readings."""
         if self._live_task is not None and not self._live_task.done():
@@ -295,7 +300,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
         if current_data is None:
             return False
 
-        self.async_set_updated_data(
+        self._set_live_data(
             replace(
                 current_data,
                 live_power=payload.get("power", current_data.live_power),
@@ -322,7 +327,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
         if current_data is None:
             return
 
-        self.async_set_updated_data(
+        self._set_live_data(
             replace(
                 current_data,
                 live_connected=connected,
@@ -360,7 +365,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
                 continue
 
             _LOGGER.debug("OBI live reading is stale; no message received recently")
-            self.async_set_updated_data(replace(current_data, live_stale=True))
+            self._set_live_data(replace(current_data, live_stale=True))
             try:
                 await self._async_enable_live_mode()
             except ObiAuthError as err:
@@ -384,7 +389,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
         if current_data is None:
             return
 
-        self.async_set_updated_data(
+        self._set_live_data(
             replace(
                 current_data,
                 sensor_info=sensor,
@@ -424,7 +429,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
         if current_data is None:
             return
 
-        self.async_set_updated_data(
+        self._set_live_data(
             replace(
                 current_data,
                 sensor_info=sensor,
