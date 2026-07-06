@@ -18,6 +18,7 @@ from .const import (
     ACCEPT_BRIDGES,
     ACCEPT_HISTORICAL,
     ACCEPT_LANGUAGE,
+    ACCEPT_SENSOR,
     API_KEY,
     BRIDGES_URL,
     HISTORICAL_DATA_URL_TEMPLATE,
@@ -27,6 +28,9 @@ from .const import (
     LOGIN_ORIGIN,
     LOGIN_REFERER,
     LOGIN_URL,
+    LIVE_DATA_URL,
+    LIVE_USER_AGENT,
+    SENSOR_URL_TEMPLATE,
     USER_AGENT,
 )
 
@@ -355,3 +359,171 @@ class ObiApiClient:
             )
             raise ObiConnectionError("Unexpected response format for historical data")
         return data
+
+    async def async_set_sensor_upload_interval(
+        self, mid_id: str, upload_interval: int
+    ) -> dict[str, Any]:
+        """Set the upload interval for a sensor and return the updated sensor."""
+        await self._ensure_logged_in()
+
+        url = SENSOR_URL_TEMPLATE.format(mid_id=mid_id)
+        payload = json.dumps(
+            {"id": mid_id, "uploadInterval": upload_interval},
+            separators=(",", ":"),
+        )
+        payload_bytes = payload.encode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "Accept": ACCEPT_SENSOR,
+            "Accept-Language": ACCEPT_LANGUAGE,
+            "Content-Type": ACCEPT_SENSOR,
+            "Content-Length": str(len(payload_bytes)),
+            "User-Agent": LIVE_USER_AGENT,
+            "X-Platform": "iOS",
+            "X-Lib-Version": "26.6.9",
+        }
+
+        for attempt in range(2):
+            try:
+                async with self._session.patch(
+                    url,
+                    data=payload_bytes,
+                    headers=headers,
+                    timeout=_REQUEST_TIMEOUT,
+                ) as resp:
+                    if resp.status == 401 and attempt == 0:
+                        _LOGGER.debug(
+                            "OBI sensor update returned 401, refreshing token and retrying"
+                        )
+                        await self.async_login()
+                        headers["Authorization"] = f"Bearer {self._token}"
+                        continue
+                    if resp.status in (401, 403):
+                        await _log_http_error(resp, f"OBI sensor update to {url}")
+                        raise ObiAuthError(
+                            f"Sensor update failed with HTTP {resp.status}"
+                        )
+                    if resp.status == 404:
+                        _LOGGER.warning("OBI sensor not found (HTTP 404): %s", url)
+                        raise ObiNotFoundError(f"Sensor not found: {url}")
+                    if resp.status >= 400:
+                        await _log_http_error(resp, f"OBI sensor update to {url}")
+                        raise ObiConnectionError(
+                            f"Sensor update to {url} failed with HTTP {resp.status}"
+                        )
+                    try:
+                        data = await resp.json(content_type=None)
+                    except ValueError as err:
+                        text = await _safe_text(resp)
+                        _LOGGER.error(
+                            "OBI sensor update response was not valid JSON (HTTP %s): %s",
+                            resp.status,
+                            _truncate(text),
+                        )
+                        raise ObiConnectionError(
+                            "Received invalid response from OBI sensor update"
+                        ) from err
+                    if not isinstance(data, dict):
+                        _LOGGER.error(
+                            "Unexpected response type for sensor update: %s",
+                            type(data).__name__,
+                        )
+                        raise ObiConnectionError(
+                            "Unexpected response format for sensor update"
+                        )
+                    return data
+            except aiohttp.ClientConnectorDNSError as err:
+                _LOGGER.error("DNS resolution failed updating %s: %s", url, err)
+                raise ObiConnectionError(f"DNS resolution failed for {url}") from err
+            except aiohttp.ClientSSLError as err:
+                _LOGGER.error("SSL/TLS error updating %s: %s", url, err)
+                raise ObiConnectionError(f"SSL/TLS error updating {url}") from err
+            except (asyncio.TimeoutError, aiohttp.ServerTimeoutError) as err:
+                _LOGGER.error("Timeout updating %s: %s", url, err)
+                raise ObiConnectionError(f"Timeout updating {url}") from err
+            except aiohttp.ClientConnectorError as err:
+                _LOGGER.error("Could not connect to %s: %s", url, err)
+                raise ObiConnectionError(f"Could not connect to {url}") from err
+            except aiohttp.ClientError as err:
+                _LOGGER.error("Network error updating %s: %s", url, err)
+                raise ObiConnectionError(f"Network error updating {url}") from err
+
+        raise ObiAuthError("Sensor update was not authorized after refreshing token")
+
+    async def async_connect_live_data(
+        self, hh_id: str, mid_id: str
+    ) -> aiohttp.ClientWebSocketResponse:
+        """Open the live-data WebSocket for the given bridge/sensor."""
+        await self._ensure_logged_in()
+
+        params = {
+            "bridgeId": hh_id,
+            "sensorId": mid_id,
+        }
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "Accept": "*/*",
+            "Accept-Language": ACCEPT_LANGUAGE,
+            "User-Agent": LIVE_USER_AGENT,
+            "X-Platform": "iOS",
+            "X-Lib-Version": "26.6.9",
+        }
+
+        for attempt in range(2):
+            try:
+                return await self._session.ws_connect(
+                    LIVE_DATA_URL,
+                    params=params,
+                    headers=headers,
+                    timeout=_REQUEST_TIMEOUT,
+                    heartbeat=30,
+                    compress=15,
+                )
+            except aiohttp.WSServerHandshakeError as err:
+                if err.status == 401 and attempt == 0:
+                    _LOGGER.debug(
+                        "OBI live WebSocket returned 401, refreshing token and retrying"
+                    )
+                    await self.async_login()
+                    headers["Authorization"] = f"Bearer {self._token}"
+                    continue
+                if err.status in (401, 403):
+                    _LOGGER.error(
+                        "OBI live WebSocket authorization failed with HTTP %s",
+                        err.status,
+                    )
+                    raise ObiAuthError(
+                        f"Live WebSocket authorization failed with HTTP {err.status}"
+                    ) from err
+                _LOGGER.error(
+                    "OBI live WebSocket handshake failed with HTTP %s",
+                    err.status,
+                )
+                raise ObiConnectionError(
+                    f"Live WebSocket handshake failed with HTTP {err.status}"
+                ) from err
+            except aiohttp.ClientConnectorDNSError as err:
+                _LOGGER.error("DNS resolution failed for OBI live WebSocket: %s", err)
+                raise ObiConnectionError(
+                    "DNS resolution failed for the OBI live WebSocket endpoint"
+                ) from err
+            except aiohttp.ClientSSLError as err:
+                _LOGGER.error("SSL/TLS error on OBI live WebSocket: %s", err)
+                raise ObiConnectionError(
+                    "SSL/TLS error while connecting to the OBI live WebSocket endpoint"
+                ) from err
+            except (asyncio.TimeoutError, aiohttp.ServerTimeoutError) as err:
+                _LOGGER.error("Timeout connecting to OBI live WebSocket: %s", err)
+                raise ObiConnectionError(
+                    "Timeout while connecting to the OBI live WebSocket endpoint"
+                ) from err
+            except aiohttp.ClientConnectorError as err:
+                _LOGGER.error("Could not connect to OBI live WebSocket: %s", err)
+                raise ObiConnectionError(
+                    "Could not connect to the OBI live WebSocket endpoint"
+                ) from err
+            except aiohttp.ClientError as err:
+                _LOGGER.error("Network error on OBI live WebSocket: %s", err)
+                raise ObiConnectionError("Network error during OBI live WebSocket") from err
+
+        raise ObiAuthError("Live WebSocket was not authorized after refreshing token")

@@ -14,10 +14,12 @@ from .const import (
     CONF_HH_ID,
     CONF_HISTORICAL_DURATION,
     CONF_LOGIN_REFRESH_INTERVAL,
+    CONF_LIVE_ENABLED,
     CONF_MID_ID,
     DEFAULT_DEBUG,
     DEFAULT_HISTORICAL_DURATION,
     DEFAULT_LOGIN_REFRESH_INTERVAL,
+    DEFAULT_LIVE_ENABLED,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
@@ -54,6 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     historical_duration = options.get(
         CONF_HISTORICAL_DURATION, DEFAULT_HISTORICAL_DURATION
     )
+    live_enabled = options.get(CONF_LIVE_ENABLED, DEFAULT_LIVE_ENABLED)
 
     coordinator = ObiEnergyCoordinator(
         hass,
@@ -63,6 +66,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         mid_id,
         scan_interval,
         historical_duration,
+        live_enabled,
     )
 
     await coordinator.async_config_entry_first_refresh()
@@ -70,6 +74,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    if live_enabled:
+        await coordinator.async_start_live_updates()
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     return True
@@ -82,6 +88,10 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    coordinator: ObiEnergyCoordinator | None = hass.data[DOMAIN].get(entry.entry_id)
+    if coordinator is not None:
+        await coordinator.async_stop_live_updates()
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)

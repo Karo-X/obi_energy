@@ -17,10 +17,12 @@ from .const import (
     CONF_HH_ID,
     CONF_HISTORICAL_DURATION,
     CONF_LOGIN_REFRESH_INTERVAL,
+    CONF_LIVE_ENABLED,
     CONF_MID_ID,
     DEFAULT_DEBUG,
     DEFAULT_HISTORICAL_DURATION,
     DEFAULT_LOGIN_REFRESH_INTERVAL,
+    DEFAULT_LIVE_ENABLED,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
@@ -318,6 +320,10 @@ class ObiEnergyOptionsFlow(config_entries.OptionsFlow):
                         CONF_HISTORICAL_DURATION, DEFAULT_HISTORICAL_DURATION
                     ),
                 ): str,
+                vol.Required(
+                    CONF_LIVE_ENABLED,
+                    default=options.get(CONF_LIVE_ENABLED, DEFAULT_LIVE_ENABLED),
+                ): bool,
                 vol.Required(
                     CONF_DEBUG, default=options.get(CONF_DEBUG, DEFAULT_DEBUG)
                 ): bool,

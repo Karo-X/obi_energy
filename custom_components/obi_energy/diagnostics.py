@@ -32,6 +32,10 @@ async def async_get_config_entry_diagnostics(
         "hh_id": coordinator.hh_id,
         "mid_id": coordinator.mid_id,
         "historical_duration": coordinator.historical_duration,
+        "live_options": {
+            "enabled": coordinator.live_enabled,
+            "upload_interval": coordinator.live_upload_interval,
+        },
         "last_update_success": coordinator.last_update_success,
         "bridge_reachable": data.bridges_available if data else None,
         "sensor_info": {
@@ -46,4 +50,16 @@ async def async_get_config_entry_diagnostics(
         },
         "energy": data.energy if data else None,
         "negative_energy": data.negative_energy if data else None,
+        "live": {
+            "power": data.live_power if data else None,
+            "rssi": data.live_rssi if data else None,
+            "battery": data.live_battery if data else None,
+            "connected": data.live_connected if data else None,
+            "last_error": data.live_last_error if data else None,
+            "stale": data.live_stale if data else None,
+            "upload_interval": data.live_upload_interval if data else None,
+            "last_message_at": data.live_last_message_at.isoformat()
+            if data and data.live_last_message_at
+            else None,
+        },
     }

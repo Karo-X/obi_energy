@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfEnergy
+from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
@@ -40,6 +40,10 @@ async def async_setup_entry(
             ObiNegativeEnergySensor(coordinator, entry),
             ObiEinspeisungKwhSensor(coordinator, entry),
             ObiNettoEnergyKwhSensor(coordinator, entry),
+            ObiLivePowerSensor(coordinator, entry),
+            ObiLiveRssiSensor(coordinator, entry),
+            ObiLiveBatterySensor(coordinator, entry),
+            ObiLiveLastMessageSensor(coordinator, entry),
             ObiBridgeBatterySensor(coordinator, entry),
             ObiBridgeConnectionStrengthSensor(coordinator, entry),
             ObiLastRecordReceivedSensor(coordinator, entry),
@@ -226,6 +230,139 @@ class ObiNettoEnergyKwhSensor(ObiEnergyBaseEntity):
         if data.energy is None or data.negative_energy is None:
             return None
         return (data.energy["value"] - data.negative_energy["value"]) / WH_PER_KWH
+
+
+class ObiLivePowerSensor(ObiEnergyBaseEntity):
+    """Current live power in W."""
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="live_power",
+                translation_key="live_power",
+                native_unit_of_measurement=UnitOfPower.WATT,
+                device_class=SensorDeviceClass.POWER,
+                state_class=SensorStateClass.MEASUREMENT,
+            ),
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True once a live power reading has arrived."""
+        data = self.coordinator.data
+        return (
+            super().available
+            and data.live_power is not None
+            and not data.live_stale
+        )
+
+    @property
+    def native_value(self) -> int | float | None:
+        """Return the latest live power value."""
+        return self.coordinator.data.live_power
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose live-stream diagnostics."""
+        data = self.coordinator.data
+        return {
+            "live_connected": data.live_connected,
+            "live_last_error": data.live_last_error,
+            "live_last_message_at": data.live_last_message_at,
+            "live_stale": data.live_stale,
+            "live_upload_interval": data.live_upload_interval,
+        }
+
+
+class ObiLiveRssiSensor(ObiEnergyBaseEntity):
+    """Live RSSI from the bridge sensor."""
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="live_rssi",
+                translation_key="live_rssi",
+                native_unit_of_measurement="dBm",
+                device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+                state_class=SensorStateClass.MEASUREMENT,
+                entity_category=EntityCategory.DIAGNOSTIC,
+            ),
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True once a live RSSI reading has arrived."""
+        return super().available and self.coordinator.data.live_rssi is not None
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the latest live RSSI value."""
+        return self.coordinator.data.live_rssi
+
+
+class ObiLiveBatterySensor(ObiEnergyBaseEntity):
+    """Live battery level from the bridge sensor."""
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="live_battery",
+                translation_key="live_battery",
+                native_unit_of_measurement=PERCENTAGE,
+                device_class=SensorDeviceClass.BATTERY,
+                state_class=SensorStateClass.MEASUREMENT,
+                entity_category=EntityCategory.DIAGNOSTIC,
+            ),
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True once a live battery reading has arrived."""
+        return super().available and self.coordinator.data.live_battery is not None
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the latest live battery value."""
+        return self.coordinator.data.live_battery
+
+
+class ObiLiveLastMessageSensor(ObiEnergyBaseEntity):
+    """Timestamp of the last live WebSocket message."""
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="live_last_message",
+                translation_key="live_last_message",
+                device_class=SensorDeviceClass.TIMESTAMP,
+                entity_category=EntityCategory.DIAGNOSTIC,
+            ),
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True once a live message has arrived."""
+        return (
+            super().available
+            and self.coordinator.data.live_last_message_at is not None
+        )
+
+    @property
+    def native_value(self):
+        """Return the last live message timestamp as a datetime."""
+        return self.coordinator.data.live_last_message_at
 
 
 class ObiBridgeBatterySensor(ObiEnergyBaseEntity):
