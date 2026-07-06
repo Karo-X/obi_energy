@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.2.0
+
+Adds optional live tracking (PR #13, contributed by @la-sina), plus a fix for
+stale `energy`/`negative_energy` readings that affects everyone.
+
+### Added
+
+- **Live tracking** (disabled by default, enable via the integration's
+  **Configure** options): opens a WebSocket connection to OBI's live-mode
+  endpoint and requests a fast (2-second) sensor upload interval, exposing
+  four new diagnostic entities — `sensor.obi_live_power`,
+  `sensor.obi_live_rssi`, `sensor.obi_live_battery`, and
+  `sensor.obi_live_last_message`. `sensor.obi_live_power` reports raw watts as
+  sent by OBI; the sign convention for consumption vs. feed-in is not yet
+  confirmed. Turning live tracking off (or unloading/reloading the
+  integration) restores the sensor's normal 300-second upload interval so the
+  physical device doesn't stay in fast-report mode.
+
+### Fixed
+
+- Historical polling for `energy`/`negative_energy` no longer stalls while
+  live tracking is active — the live-data listener previously nudged the
+  coordinator's regular refresh timer on every live message, which could
+  starve the normal historical-data poll when live updates arrived every
+  couple of seconds.
+- `_latest_measurement` now also recognizes a `time` field (in addition to
+  `timestamp`) on historical records, matching a response variant observed
+  from OBI's API.
+
 ## v0.1.2
 
 Reduces the default `historical_duration` from `PT6H` to `PT15M`.
