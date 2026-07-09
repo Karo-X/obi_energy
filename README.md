@@ -119,7 +119,10 @@ No YAML configuration is needed or supported.
 
 After setup, click **Configure** on the integration to adjust:
 
-- **Measurement scan interval** (default: 60 seconds)
+- **Measurement scan interval** (default: 300 seconds) — OBI's backend only
+  writes new readings into its own timeseries database every 5 minutes
+  (confirmed directly by OBI), so polling more often than that just repeats
+  the same data and adds unnecessary load on their servers.
 - **Login refresh interval** (default: 55 minutes) — how often the session
   token is proactively renewed, independent of the 401-triggered refresh
 - **Historical data duration** (default: `PT15M`, ISO 8601 duration) — keep

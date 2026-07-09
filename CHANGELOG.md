@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.1
+
+Raises the default `scan_interval` from 60 to 300 seconds.
+
+OBI's product team confirmed directly that their backend only writes new
+readings into its own timeseries database every 5 minutes, regardless of how
+often it's polled. Polling more frequently than that doesn't get you fresher
+data — it just repeats the same reading and adds unnecessary load on OBI's
+servers. Users who already set a custom `scan_interval` are unaffected; this
+only changes the out-of-the-box default for new setups.
+
 ## v0.2.0
 
 Adds optional live tracking (PR #13, contributed by @la-sina), plus a fix for
