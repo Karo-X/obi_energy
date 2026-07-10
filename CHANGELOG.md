@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.0-beta.2
+
+**Beta pre-release.**
+
+### Fixed
+
+- `sensor.obi_live_rssi` and `sensor.obi_live_battery` now correctly become
+  `unavailable` once live data goes stale (no message for 90+ seconds, e.g.
+  after live tracking is turned off via `switch.obi_live_tracking`), instead
+  of showing the last known value indefinitely. `sensor.obi_live_power`
+  already behaved this way; the other two live sensors were missed.
+
 ## v0.3.0-beta.1
 
 **Beta pre-release** — published so it can be installed via HACS by enabling
