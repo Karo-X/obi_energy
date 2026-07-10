@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased (beta)
+## v0.3.0-beta.1
+
+**Beta pre-release** — published so it can be installed via HACS by enabling
+"Show beta versions" for this repository, without affecting users on the
+regular v0.2.1 release. Please try it out and report any issues in the
+GitHub issues before it's promoted to a regular release.
 
 Adds `switch.obi_live_tracking` (fixes #19) to turn live tracking on/off at
 runtime — from an automation, script, or the dashboard — without reloading
@@ -8,9 +13,6 @@ the integration. The **Enable live tracking** option now only controls the
 state live tracking starts in after a Home Assistant restart; the switch is
 what you'd wire up to e.g. disable live tracking during off-peak hours to
 save the sensor's battery, and re-enable it later.
-
-This is a new, less-tested addition — please try it out and report any
-issues before it's promoted to a regular release.
 
 ## v0.2.1
 
