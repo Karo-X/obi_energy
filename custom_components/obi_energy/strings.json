@@ -60,7 +60,7 @@
           "scan_interval": "Measurement scan interval (seconds)",
           "login_refresh_interval": "Login refresh interval (seconds)",
           "historical_duration": "Historical data duration (ISO 8601, e.g. PT15M)",
-          "live_enabled": "Enable live tracking",
+          "live_enabled": "Enable live tracking on startup (can be toggled at runtime with the \"Live tracking\" switch)",
           "debug": "Enable debug logging",
           "hh_id": "Override household ID (HH_ID)",
           "mid_id": "Override sensor ID (MID_ID)"
@@ -110,6 +110,11 @@
     "binary_sensor": {
       "bridge_online": {
         "name": "Bridge online"
+      }
+    },
+    "switch": {
+      "live_tracking": {
+        "name": "Live tracking"
       }
     }
   }

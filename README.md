@@ -53,6 +53,7 @@ Assistant energy tooling — and the Energy Dashboard — expects kWh.
 | `sensor.obi_live_rssi` | dBm | signal_strength | measurement |
 | `sensor.obi_live_battery` | % | battery | measurement |
 | `sensor.obi_live_last_message` | – | timestamp | – |
+| `switch.obi_live_tracking` | – | – | – (turns live tracking on/off at runtime) |
 | `sensor.obi_bridge_battery` | % | battery | – |
 | `binary_sensor.obi_bridge_online` | – | connectivity | – |
 | `sensor.obi_bridge_connection_strength` | – | – | – (text, e.g. `GOOD_CONNECTION`) |
@@ -129,13 +130,25 @@ After setup, click **Configure** on the integration to adjust:
   this small. Larger windows (e.g. `PT6H`) have been observed in practice to
   make OBI's API return older data instead of the latest reading, causing
   the energy sensors to appear stuck.
-- **Enable live tracking** (default: disabled) — turns the live WebSocket and
-  live-mode activation request on or off. Enabling requests OBI's 2-second
+- **Enable live tracking** (default: disabled) — the state live tracking
+  starts in when Home Assistant (re)starts. Enabling requests OBI's 2-second
   live upload interval; disabling closes the live stream and restores the
   normal 300-second upload interval.
 - **Debug logging**
 - **Manual `HH_ID` / `MID_ID` overrides** (useful if `/bridges` starts
   failing after setup)
+
+### Toggling live tracking at runtime (beta)
+
+**`switch.obi_live_tracking`** lets you turn live tracking on/off from an
+automation, script, or the dashboard, without reloading the integration or
+going through **Configure**. This is useful if you only want the higher
+battery/radio usage of live mode during certain hours (e.g. off-peak, when
+the base load is the only thing worth watching closely) and the normal
+5-minute polling the rest of the time. The **Enable live tracking** option
+only decides the starting state after a Home Assistant restart; the switch
+is the one to automate. This is a new, less-tested feature — feedback and
+bug reports are welcome.
 
 ### Changing your password
 

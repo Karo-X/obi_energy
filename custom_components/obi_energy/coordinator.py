@@ -113,6 +113,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
 
     async def async_start_live_updates(self) -> None:
         """Start listening for live power readings."""
+        self.live_enabled = True
         if self._live_task is not None and not self._live_task.done():
             return
         self._live_stop = asyncio.Event()
@@ -129,6 +130,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
 
     async def async_stop_live_updates(self) -> None:
         """Stop the live-data listener."""
+        self.live_enabled = False
         had_live_task = self._live_task is not None
         if self._live_stop is not None:
             self._live_stop.set()
