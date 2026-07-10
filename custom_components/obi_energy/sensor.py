@@ -297,8 +297,9 @@ class ObiLiveRssiSensor(ObiEnergyBaseEntity):
 
     @property
     def available(self) -> bool:
-        """Return True once a live RSSI reading has arrived."""
-        return super().available and self.coordinator.data.live_rssi is not None
+        """Return True once a live RSSI reading has arrived and isn't stale."""
+        data = self.coordinator.data
+        return super().available and data.live_rssi is not None and not data.live_stale
 
     @property
     def native_value(self) -> int | None:
@@ -326,8 +327,11 @@ class ObiLiveBatterySensor(ObiEnergyBaseEntity):
 
     @property
     def available(self) -> bool:
-        """Return True once a live battery reading has arrived."""
-        return super().available and self.coordinator.data.live_battery is not None
+        """Return True once a live battery reading has arrived and isn't stale."""
+        data = self.coordinator.data
+        return (
+            super().available and data.live_battery is not None and not data.live_stale
+        )
 
     @property
     def native_value(self) -> int | None:
