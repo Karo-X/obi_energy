@@ -15,10 +15,14 @@ from typing import Any
 import aiohttp
 
 from .const import (
+    ACCEPT_ANALYTICS_FORECAST,
+    ACCEPT_ANALYTICS_STANDBY,
     ACCEPT_BRIDGES,
     ACCEPT_HISTORICAL,
     ACCEPT_LANGUAGE,
     ACCEPT_SENSOR,
+    ANALYTICS_FORECAST_URL_TEMPLATE,
+    ANALYTICS_STANDBY_URL_TEMPLATE,
     API_KEY,
     BRIDGES_URL,
     HISTORICAL_DATA_URL_TEMPLATE,
@@ -358,6 +362,46 @@ class ObiApiClient:
                 "Unexpected response type for historical data: %s", type(data).__name__
             )
             raise ObiConnectionError("Unexpected response format for historical data")
+        return data
+
+    async def async_get_consumption_forecast(
+        self, hh_id: str, mid_id: str
+    ) -> dict[str, Any]:
+        """Return weekly/monthly consumption forecast for the given bridge/sensor."""
+        url = ANALYTICS_FORECAST_URL_TEMPLATE.format(hh_id=hh_id, mid_id=mid_id)
+        data = await self._authenticated_get(url, accept=ACCEPT_ANALYTICS_FORECAST)
+        if not isinstance(data, dict):
+            _LOGGER.error(
+                "Unexpected response type for forecast: %s", type(data).__name__
+            )
+            raise ObiConnectionError("Unexpected response format for consumption forecast")
+        return data
+
+    async def async_get_standby_power(
+        self, hh_id: str, mid_id: str, interval: str, duration: str
+    ) -> list[dict[str, Any]]:
+        """Return average standby power records (watts) for a completed-period interval."""
+        url = ANALYTICS_STANDBY_URL_TEMPLATE.format(
+            hh_id=hh_id, mid_id=mid_id, interval=interval
+        )
+
+        try:
+            delta = _parse_iso8601_duration(duration)
+        except ValueError as err:
+            _LOGGER.error("Invalid standby duration %r: %s", duration, err)
+            raise ObiConnectionError(f"Invalid standby duration: {duration}") from err
+
+        start = datetime.now(timezone.utc) - delta
+        start_str = start.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        params = {"duration": f"{start_str}/{duration}"}
+        data = await self._authenticated_get(url, accept=ACCEPT_ANALYTICS_STANDBY, params=params)
+        if not isinstance(data, list):
+            _LOGGER.error(
+                "Unexpected response type for standby (%s): %s", interval, type(data).__name__
+            )
+            raise ObiConnectionError(
+                f"Unexpected response format for standby power ({interval})"
+            )
         return data
 
     async def async_set_sensor_upload_interval(

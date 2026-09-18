@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
+from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
@@ -47,6 +47,15 @@ async def async_setup_entry(
             ObiBridgeBatterySensor(coordinator, entry),
             ObiBridgeConnectionStrengthSensor(coordinator, entry),
             ObiLastRecordReceivedSensor(coordinator, entry),
+            ObiForecastWeeklySensor(coordinator, entry),
+            ObiForecastMonthlySensor(coordinator, entry),
+            ObiStandbyDailySensor(coordinator, entry),
+            ObiStandbyWeeklySensor(coordinator, entry),
+            ObiStandbyMonthlySensor(coordinator, entry),
+            ObiStandbyYearlySensor(coordinator, entry),
+            ObiOtaStatusSensor(coordinator, entry),
+            ObiOtaProgressSensor(coordinator, entry),
+            ObiUploadIntervalSensor(coordinator, entry),
         ]
     )
 
@@ -473,3 +482,267 @@ class ObiLastRecordReceivedSensor(ObiEnergyBaseEntity):
         if not raw:
             return None
         return dt_util.parse_datetime(raw)
+
+
+class ObiForecastWeeklySensor(ObiEnergyBaseEntity):
+    """Weekly consumption forecast."""
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="forecast_weekly",
+                translation_key="forecast_weekly",
+                native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+                device_class=SensorDeviceClass.ENERGY,
+                # TOTAL, not MEASUREMENT: Home Assistant rejects MEASUREMENT
+                # for device_class ENERGY. TOTAL_INCREASING would be wrong
+                # too - a forecast is revised downwards as well, and HA reads
+                # a drop under TOTAL_INCREASING as a meter reset. TOTAL keeps
+                # long-term statistics working and tolerates falling values.
+                state_class=SensorStateClass.TOTAL,
+            ),
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True if a weekly forecast value is known."""
+        return (
+            super().available
+            and self.coordinator.data.consumption_forecast_weekly is not None
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the weekly consumption forecast in Wh."""
+        return self.coordinator.data.consumption_forecast_weekly
+
+
+class ObiForecastMonthlySensor(ObiEnergyBaseEntity):
+    """Monthly consumption forecast."""
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="forecast_monthly",
+                translation_key="forecast_monthly",
+                native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+                device_class=SensorDeviceClass.ENERGY,
+                # TOTAL, not MEASUREMENT: Home Assistant rejects MEASUREMENT
+                # for device_class ENERGY. TOTAL_INCREASING would be wrong
+                # too - a forecast is revised downwards as well, and HA reads
+                # a drop under TOTAL_INCREASING as a meter reset. TOTAL keeps
+                # long-term statistics working and tolerates falling values.
+                state_class=SensorStateClass.TOTAL,
+            ),
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True if a monthly forecast value is known."""
+        return (
+            super().available
+            and self.coordinator.data.consumption_forecast_monthly is not None
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the monthly consumption forecast in Wh."""
+        return self.coordinator.data.consumption_forecast_monthly
+
+
+class _ObiStandbySensorBase(ObiEnergyBaseEntity):
+    """Common base for standby-power sensors (one per interval)."""
+
+    _standby_field: str
+
+    @property
+    def available(self) -> bool:
+        """Return True if at least one standby record is known for this interval."""
+        records = getattr(self.coordinator.data, self._standby_field)
+        return super().available and bool(records)
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the most recent average standby power value in W."""
+        records = getattr(self.coordinator.data, self._standby_field)
+        if not records:
+            return None
+        latest = max(records, key=lambda r: r.get("time", ""))
+        return latest.get("value")
+
+
+class ObiStandbyDailySensor(_ObiStandbySensorBase):
+    """Average standby power for the last completed day.
+
+    The API returns this measure in watts (a power value, e.g. 147), not
+    watt-hours, despite the "standby consumption" naming used elsewhere.
+    """
+
+    _standby_field = "standby_daily"
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="standby_daily",
+                translation_key="standby_daily",
+                native_unit_of_measurement=UnitOfPower.WATT,
+                device_class=SensorDeviceClass.POWER,
+                state_class=SensorStateClass.MEASUREMENT,
+            ),
+        )
+
+
+class ObiStandbyWeeklySensor(_ObiStandbySensorBase):
+    """Average standby power for the last completed week."""
+
+    _standby_field = "standby_weekly"
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="standby_weekly",
+                translation_key="standby_weekly",
+                native_unit_of_measurement=UnitOfPower.WATT,
+                device_class=SensorDeviceClass.POWER,
+                state_class=SensorStateClass.MEASUREMENT,
+            ),
+        )
+
+
+class ObiStandbyMonthlySensor(_ObiStandbySensorBase):
+    """Average standby power for the last completed month."""
+
+    _standby_field = "standby_monthly"
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="standby_monthly",
+                translation_key="standby_monthly",
+                native_unit_of_measurement=UnitOfPower.WATT,
+                device_class=SensorDeviceClass.POWER,
+                state_class=SensorStateClass.MEASUREMENT,
+            ),
+        )
+
+
+class ObiStandbyYearlySensor(_ObiStandbySensorBase):
+    """Average standby power for the last completed year."""
+
+    _standby_field = "standby_yearly"
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="standby_yearly",
+                translation_key="standby_yearly",
+                native_unit_of_measurement=UnitOfPower.WATT,
+                device_class=SensorDeviceClass.POWER,
+                state_class=SensorStateClass.MEASUREMENT,
+            ),
+        )
+
+
+class ObiOtaStatusSensor(ObiEnergyBaseEntity):
+    """OTA update status of the OBI bridge sensor."""
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="ota_status",
+                translation_key="ota_status",
+                icon="mdi:cloud-download-outline",
+                entity_category=EntityCategory.DIAGNOSTIC,
+            ),
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True if bridge/sensor info is known."""
+        return super().available and self.coordinator.data.sensor_info is not None
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the OTA status, e.g. NOT_UPDATING."""
+        sensor_info = self.coordinator.data.sensor_info
+        return sensor_info.get("otaStatus") if sensor_info else None
+
+
+class ObiOtaProgressSensor(ObiEnergyBaseEntity):
+    """OTA update progress of the OBI bridge sensor."""
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="ota_progress",
+                translation_key="ota_progress",
+                native_unit_of_measurement=PERCENTAGE,
+                state_class=SensorStateClass.MEASUREMENT,
+                icon="mdi:cloud-download-outline",
+                entity_category=EntityCategory.DIAGNOSTIC,
+            ),
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True if bridge/sensor info is known."""
+        return super().available and self.coordinator.data.sensor_info is not None
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the OTA progress percentage, null outside of an update."""
+        sensor_info = self.coordinator.data.sensor_info
+        return sensor_info.get("otaProgress") if sensor_info else None
+
+
+class ObiUploadIntervalSensor(ObiEnergyBaseEntity):
+    """Current reporting interval of the OBI bridge sensor."""
+
+    def __init__(self, coordinator: ObiEnergyCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(
+            coordinator,
+            entry,
+            SensorEntityDescription(
+                key="upload_interval",
+                translation_key="upload_interval",
+                native_unit_of_measurement=UnitOfTime.SECONDS,
+                icon="mdi:timer-outline",
+                entity_category=EntityCategory.DIAGNOSTIC,
+            ),
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True if bridge/sensor info is known."""
+        return super().available and self.coordinator.data.sensor_info is not None
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the current reporting interval in seconds."""
+        sensor_info = self.coordinator.data.sensor_info
+        return sensor_info.get("uploadInterval") if sensor_info else None

@@ -22,6 +22,8 @@ from .const import (
     LIVE_UPLOAD_INTERVAL_ENABLED,
     MEASURE_ENERGY,
     MEASURE_NEGATIVE_ENERGY,
+    STANDBY_DURATION,
+    STANDBY_INTERVALS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,6 +49,12 @@ class ObiEnergyData:
     live_last_error: str | None = None
     live_stale: bool = False
     live_upload_interval: int | None = None
+    consumption_forecast_weekly: int | None = None
+    consumption_forecast_monthly: int | None = None
+    standby_daily: list[dict[str, Any]] | None = None
+    standby_weekly: list[dict[str, Any]] | None = None
+    standby_monthly: list[dict[str, Any]] | None = None
+    standby_yearly: list[dict[str, Any]] | None = None
 
 
 def _latest_measurement(
@@ -196,6 +204,29 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
             negative_energy.get("value") if negative_energy else None,
         )
 
+        # Forecast and standby power are optional supplementary data -- a
+        # failure here must not block the poll cycle for the more important
+        # energy/sensor_info values above.
+        try:
+            forecast = await self.client.async_get_consumption_forecast(
+                self.hh_id, self.mid_id
+            )
+        except ObiApiError as err:
+            _LOGGER.debug("Could not fetch consumption forecast: %s", err)
+            forecast = {}
+
+        standby_data: dict[str, list[dict[str, Any]]] = {}
+        for interval in STANDBY_INTERVALS:
+            try:
+                standby_data[interval] = await self.client.async_get_standby_power(
+                    self.hh_id, self.mid_id, interval, STANDBY_DURATION
+                )
+            except ObiApiError as err:
+                _LOGGER.debug(
+                    "Could not fetch %s standby power: %s", interval, err
+                )
+                standby_data[interval] = []
+
         return ObiEnergyData(
             sensor_info=sensor_info,
             energy=energy,
@@ -213,6 +244,12 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
             live_upload_interval=current_data.live_upload_interval
             if current_data
             else None,
+            consumption_forecast_weekly=forecast.get("consumptionForecastWeekly"),
+            consumption_forecast_monthly=forecast.get("consumptionForecastMonthly"),
+            standby_daily=standby_data.get("daily"),
+            standby_weekly=standby_data.get("weekly"),
+            standby_monthly=standby_data.get("monthly"),
+            standby_yearly=standby_data.get("yearly"),
         )
 
     async def _async_live_update_loop(self) -> None:
