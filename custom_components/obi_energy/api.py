@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import re
+import ssl
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -110,6 +111,41 @@ async def _log_http_error(resp: aiohttp.ClientResponse, context: str) -> None:
     )
 
 
+_LOGIN_SSL_CONTEXT: ssl.SSLContext | None = None
+
+
+def _build_login_ssl_context() -> ssl.SSLContext:
+    """Build the SSL context used for the OBI login request.
+
+    aiohttp's default SSL context hardcodes::
+
+        sslcontext.set_alpn_protocols(("http/1.1",))
+
+    OBI's CloudFront WAF answers ClientHellos that advertise *only* http/1.1
+    with an empty-bodied HTTP 404 (see #28). The login endpoint itself is fine
+    - the TLS handshake is what gets filtered - which is why the heyOBI app and
+    a plain browser are unaffected: both also offer h2.
+
+    Omitting the ALPN extension entirely restores the normal 401/200 responses.
+    Offering h2 is not an option here: CloudFront would then negotiate HTTP/2,
+    which aiohttp cannot speak.
+
+    Creating the context loads CA certificates from disk, so it is built in an
+    executor (see `_async_login_ssl_context`) and cached for the process
+    lifetime.
+    """
+    return ssl.create_default_context()
+
+
+async def _async_login_ssl_context() -> ssl.SSLContext:
+    """Return the cached login SSL context, building it off-loop on first use."""
+    global _LOGIN_SSL_CONTEXT
+    if _LOGIN_SSL_CONTEXT is None:
+        loop = asyncio.get_running_loop()
+        _LOGIN_SSL_CONTEXT = await loop.run_in_executor(None, _build_login_ssl_context)
+    return _LOGIN_SSL_CONTEXT
+
+
 class ObiApiClient:
     """Thin async client for the OBI Energy Tracking API."""
 
@@ -180,11 +216,16 @@ class ObiApiClient:
         }
         _LOGGER.debug("Logging in to OBI (%s)", LOGIN_URL)
 
+        # Per-request SSL context: the shared Home Assistant client session is
+        # deliberately left untouched so no other integration is affected.
+        login_ssl = await _async_login_ssl_context()
+
         try:
             async with self._session.post(
                 LOGIN_URL,
                 data=payload_bytes,
                 headers=headers,
+                ssl=login_ssl,
                 timeout=_REQUEST_TIMEOUT,
             ) as resp:
                 if resp.status in (401, 403):
