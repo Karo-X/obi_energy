@@ -27,6 +27,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 _LIVE_RECONNECT_DELAY = 10
+_LIVE_RECONNECT_DELAY_MAX = 300
 _LIVE_STALE_AFTER = timedelta(seconds=90)
 _LIVE_STALE_CHECK_INTERVAL = 15
 
@@ -219,6 +220,8 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
         """Maintain the live WebSocket connection and publish incoming readings."""
         assert self._live_stop is not None
 
+        reconnect_delay = _LIVE_RECONNECT_DELAY
+
         while not self._live_stop.is_set():
             try:
                 await self._async_enable_live_mode()
@@ -226,6 +229,7 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
                     self.hh_id, self.mid_id
                 )
                 _LOGGER.debug("OBI live WebSocket connected")
+                reconnect_delay = _LIVE_RECONNECT_DELAY
                 self._set_live_connection_state(connected=True, error=None)
                 try:
                     async for msg in websocket:
@@ -246,21 +250,33 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
                     self._set_live_connection_state(connected=False)
                     await websocket.close()
             except ObiAuthError as err:
-                _LOGGER.warning("OBI live WebSocket authentication failed: %s", err)
+                # Do NOT keep reconnecting: every attempt replays the stored
+                # password against OBI's login endpoint, which is how a single
+                # rejected login turns into a locked account. Stop the live
+                # listener and let Home Assistant ask the user to re-auth.
+                _LOGGER.warning(
+                    "OBI live WebSocket authentication failed (%s). Stopping live "
+                    "updates and requesting reauthentication instead of retrying.",
+                    err,
+                )
                 self._set_live_connection_state(connected=False, error=str(err))
+                self._entry.async_start_reauth(self.hass)
+                return
             except ObiApiError as err:
                 _LOGGER.warning("OBI live WebSocket connection failed: %s", err)
                 self._set_live_connection_state(connected=False, error=str(err))
+                reconnect_delay = min(reconnect_delay * 2, _LIVE_RECONNECT_DELAY_MAX)
             except asyncio.CancelledError:
                 raise
             except Exception as err:
                 _LOGGER.exception("Unexpected error in OBI live WebSocket listener")
                 self._set_live_connection_state(connected=False, error=str(err))
+                reconnect_delay = min(reconnect_delay * 2, _LIVE_RECONNECT_DELAY_MAX)
 
             if not self._live_stop.is_set():
                 try:
                     await asyncio.wait_for(
-                        self._live_stop.wait(), timeout=_LIVE_RECONNECT_DELAY
+                        self._live_stop.wait(), timeout=reconnect_delay
                     )
                 except asyncio.TimeoutError:
                     pass
@@ -374,8 +390,14 @@ class ObiEnergyCoordinator(DataUpdateCoordinator[ObiEnergyData]):
             try:
                 await self._async_enable_live_mode()
             except ObiAuthError as err:
-                _LOGGER.warning("OBI live mode activation failed: %s", err)
+                # Same reasoning as in the reconnect loop: never let the
+                # watchdog drive repeated password logins.
+                _LOGGER.warning(
+                    "OBI live mode activation failed (%s); stopping the stale watchdog",
+                    err,
+                )
                 self._set_live_connection_state(connected=False, error=str(err))
+                return
             except ObiApiError as err:
                 _LOGGER.warning("OBI live mode activation failed: %s", err)
                 self._set_live_connection_state(connected=False, error=str(err))
