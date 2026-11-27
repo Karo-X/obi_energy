@@ -105,6 +105,33 @@
       },
       "last_record_received": {
         "name": "Letzter Messwert empfangen"
+      },
+      "forecast_weekly": {
+        "name": "Wöchentliche Verbrauchsprognose"
+      },
+      "forecast_monthly": {
+        "name": "Monatliche Verbrauchsprognose"
+      },
+      "standby_daily": {
+        "name": "Standby-Leistung (täglich)"
+      },
+      "standby_weekly": {
+        "name": "Standby-Leistung (wöchentlich)"
+      },
+      "standby_monthly": {
+        "name": "Standby-Leistung (monatlich)"
+      },
+      "standby_yearly": {
+        "name": "Standby-Leistung (jährlich)"
+      },
+      "ota_status": {
+        "name": "OTA-Status"
+      },
+      "ota_progress": {
+        "name": "OTA-Fortschritt"
+      },
+      "upload_interval": {
+        "name": "Meldeintervall"
       }
     },
     "binary_sensor": {

@@ -105,6 +105,33 @@
       },
       "last_record_received": {
         "name": "Last record received"
+      },
+      "forecast_weekly": {
+        "name": "Weekly consumption forecast"
+      },
+      "forecast_monthly": {
+        "name": "Monthly consumption forecast"
+      },
+      "standby_daily": {
+        "name": "Standby power (daily)"
+      },
+      "standby_weekly": {
+        "name": "Standby power (weekly)"
+      },
+      "standby_monthly": {
+        "name": "Standby power (monthly)"
+      },
+      "standby_yearly": {
+        "name": "Standby power (yearly)"
+      },
+      "ota_status": {
+        "name": "OTA status"
+      },
+      "ota_progress": {
+        "name": "OTA progress"
+      },
+      "upload_interval": {
+        "name": "Upload interval"
       }
     },
     "binary_sensor": {

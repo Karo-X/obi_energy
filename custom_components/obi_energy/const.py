@@ -27,6 +27,10 @@ BRIDGES_URL = f"{API_BASE_URL}/bridges"
 HISTORICAL_DATA_URL_TEMPLATE = API_BASE_URL + "/historical-data/{hh_id}/{mid_id}/meter"
 SENSOR_URL_TEMPLATE = API_BASE_URL + "/sensors/{mid_id}"
 LIVE_DATA_URL = "wss://energy-tracking-livemode.prod-eks.dbs.obi.solutions/retrieving"
+ANALYTICS_FORECAST_URL_TEMPLATE = API_BASE_URL + "/analytics/{hh_id}/{mid_id}/forecast"
+ANALYTICS_STANDBY_URL_TEMPLATE = (
+    API_BASE_URL + "/analytics/{hh_id}/{mid_id}/{interval}/standby"
+)
 
 API_KEY = "Rh57q3vtOPYTf6FtArVN1boy2AyEiIqaGEmnMks7"
 USER_AGENT = "heyOBI APP / iPhone17,2 / 4.9.1 / 560"
@@ -40,8 +44,23 @@ LOGIN_COUNTRY = "de"
 ACCEPT_BRIDGES = "application/vnd.obi.companion.energy-tracking.bridge.v1+json"
 ACCEPT_HISTORICAL = "application/vnd.obi.companion.energy-tracking.historical-record.v1+json"
 ACCEPT_SENSOR = "application/vnd.obi.companion.energy-tracking.sensor.v1+json"
+ACCEPT_ANALYTICS_FORECAST = (
+    "application/vnd.obi.companion.energy-tracking.analytics-forecast.v1+json"
+)
+ACCEPT_ANALYTICS_STANDBY = (
+    "application/vnd.obi.companion.energy-tracking.analytics-standby.v1+json"
+)
 
 MEASURE_ENERGY = "energy"
 MEASURE_NEGATIVE_ENERGY = "negative_energy"
 
 WH_PER_KWH = 1000
+
+# Standby-power intervals confirmed to exist against the live API.
+# quarterhour/minutely/raw/live were probed and do NOT exist (HTTP 400).
+STANDBY_INTERVALS = ("daily", "weekly", "monthly", "yearly")
+
+# Fixed lookback window for standby-power requests, independent of the
+# user-configurable historical_duration (which can be as short as PT15M).
+# 35 days reliably covers the last completed month regardless of that setting.
+STANDBY_DURATION = "P35D"
